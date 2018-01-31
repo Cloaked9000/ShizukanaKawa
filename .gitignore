@@ -1,0 +1,10 @@
+
+\.idea/
+
+\.directory
+
+cmake-build-debug/
+
+cmake-build-release/
+
+cmake_modules/
