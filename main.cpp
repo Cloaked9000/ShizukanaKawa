@@ -54,8 +54,13 @@ int main(int argc, char** argv)
     glade_builder->add_from_file("gui.glade");
 
     //Start application
-    Application *window;
-    glade_builder->get_widget_derived("main_window", window, window, library, sftp);
-    window->set_title(WINDOW_TITLE);
-    application->run(*window);
+    {
+        Application *window;
+        glade_builder->get_widget_derived("main_window", window, window, library, sftp);
+        window->set_title(WINDOW_TITLE);
+        application->run(*window);
+    }
+    season_table->flush();
+    episode_table->flush();
+    watch_history_table->flush();
 }

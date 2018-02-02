@@ -43,6 +43,7 @@ public:
                 Gtk::Window *window,
                 std::shared_ptr<Library> library,
                 std::shared_ptr<SFTPSession> sftp);
+    ~Application() override;
 private:
 
     /*!

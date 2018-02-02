@@ -15,6 +15,7 @@
 #include <thread>
 #include <gdkmm.h>
 #include <Log.h>
+#include <set>
 #include "Application.h"
 #include "SeasonListingWidget.h"
 
@@ -46,6 +47,13 @@ Application::Application(BaseObjectType *cobject,
     load_home();
 }
 
+Application::~Application()
+{
+    video_player = nullptr;
+    video_stream = nullptr;
+    video_source = nullptr;
+}
+
 void Application::load_home()
 {
     clear();
@@ -75,10 +83,16 @@ void Application::load_history()
     clear();
     frlog << Log::info << "Loading history screen" << Log::end;
 
+    std::set<uint64_t> seasons_shown;
     library->for_each_watch_history_entry(true, [&](std::shared_ptr<WatchHistoryEntry> episode) -> bool {
 
         //We list the seasons watched, so load the season entry
         std::shared_ptr<SeasonEntry> season = library->get_episode_season(episode->episode_id);
+
+        //Skip adding a tile if this season is already present
+        if(seasons_shown.find(season->id) != seasons_shown.end())
+            return true;
+        seasons_shown.emplace(season->id);
 
         //Create a season entry tile, and connect it to a season display handler
         auto season_listing = std::make_shared<SeasonListingWidget>(season);
