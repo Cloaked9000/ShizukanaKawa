@@ -13,14 +13,16 @@
 #include <database/episode/SQLiteEpisodeRepository.h>
 #include <database/watch_history/SQLiteWatchHistoryRepository.h>
 #include <Log.h>
-
-//Main
-frlog_define()
+#include <SignalHandler.h>
+#include <database/SQLiteMiscRepository.h>
 
 int main(int argc, char** argv)
 {
+    //Install signal handler
+    SignalHandler::install();
+
     //Initialise logging
-    if(!Log::init())
+    if(!frlog.init("logs/"))
     {
         std::cerr << "Failed to initialise logging. Exiting." << std::endl;
         return EXIT_FAILURE;
@@ -46,7 +48,8 @@ int main(int argc, char** argv)
     auto season_table = std::make_shared<SQLiteSeasonRepository>(database);
     auto episode_table = std::make_shared<SQLiteEpisodeRepository>(database);
     auto watch_history_table = std::make_shared<SQLiteWatchHistoryRepository>(database);
-    auto library = std::make_shared<Library>(sftp, config.get<std::string>(CONFIG_LIBRARY_LOCATION), season_table, episode_table, watch_history_table);
+    auto misc_table = std::make_shared<SQLiteMiscRepository>(database, season_table);
+    auto library = std::make_shared<Library>(sftp, config.get<std::string>(CONFIG_LIBRARY_LOCATION), season_table, episode_table, watch_history_table, misc_table);
 
     //Build GUI from glade file
     auto glade_builder = Gtk::Builder::create();

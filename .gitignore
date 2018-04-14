@@ -8,3 +8,17 @@ cmake-build-debug/
 cmake-build-release/
 
 cmake_modules/
+
+config\.ini
+
+database\.db
+
+database\.db-wal
+
+database\.db-shm
+
+gui\.glade~
+
+logs/
+
+tmp_thumbnail\.jpg

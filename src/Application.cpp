@@ -34,6 +34,7 @@ Application::Application(BaseObjectType *cobject,
     builder->get_widget("flow_box", results_list);
     builder->get_widget("home_button", home_button);
     builder->get_widget("history_button", history_button);
+    builder->get_widget("recently_added", recently_added_button);
     builder->get_widget("results_window", results_viewport);
     builder->get_widget("window_box", window_box);
     builder->get_widget("search_bar", search_bar);
@@ -41,6 +42,7 @@ Application::Application(BaseObjectType *cobject,
     //Connect widgets
     home_button->signal_clicked().connect(sigc::mem_fun(*this, &Application::load_home));
     history_button->signal_clicked().connect(sigc::mem_fun(*this, &Application::load_history));
+    recently_added_button->signal_clicked().connect(sigc::mem_fun(*this, &Application::load_recently_added));
     search_bar->signal_search_changed().connect(sigc::mem_fun(*this, &Application::signal_search_changed));
 
     //Load home
@@ -88,6 +90,35 @@ void Application::load_history()
 
         //We list the seasons watched, so load the season entry
         std::shared_ptr<SeasonEntry> season = library->get_episode_season(episode->episode_id);
+
+        //Skip adding a tile if this season is already present
+        if(seasons_shown.find(season->id) != seasons_shown.end())
+            return true;
+        seasons_shown.emplace(season->id);
+
+        //Create a season entry tile, and connect it to a season display handler
+        auto season_listing = std::make_shared<SeasonListingWidget>(season);
+        season_listing->signal_button_press_event().connect(
+                sigc::bind<std::shared_ptr<SeasonListingWidget>>(
+                        sigc::mem_fun(*this, &Application::signal_library_listing_clicked), season_listing));
+
+        //Add it to the global UI
+        results_list->add(*season_listing);
+        listed_results.emplace_back(std::move(season_listing));
+
+        return true;
+    });
+
+    results_list->show_all();
+}
+
+void Application::load_recently_added()
+{
+    clear();
+    frlog << Log::info << "Loading recently added screen" << Log::end;
+
+    std::set<uint64_t> seasons_shown;
+    library->for_each_recently_added([&](std::shared_ptr<SeasonEntry> season) -> bool {
 
         //Skip adding a tile if this season is already present
         if(seasons_shown.find(season->id) != seasons_shown.end())

@@ -14,12 +14,15 @@ Library::Library(std::shared_ptr<SFTPSession> sftp_,
                  std::string library_root_,
                  std::shared_ptr<SeasonRepository> season_table_,
                  std::shared_ptr<EpisodeRepository> episode_table_,
-                 std::shared_ptr<WatchHistoryRepository> watch_history_table_)
+                 std::shared_ptr<WatchHistoryRepository> watch_history_table_,
+                 std::shared_ptr<MiscRepository> misc_table_)
+
 : library_root(std::move(library_root_)),
   sftp(std::move(sftp_)),
   season_table(std::move(season_table_)),
   episode_table(std::move(episode_table_)),
-  watch_history_table(std::move(watch_history_table_))
+  watch_history_table(std::move(watch_history_table_)),
+  misc_table(std::move(misc_table_))
 {
     sync();
 }
@@ -63,7 +66,7 @@ void Library::sync()
             continue;
 
         frlog << Log::info << "Found new season: " << season.name << Log::end;
-        SeasonEntry new_season(0, season.full_name, season.name, std::move(thumbnail));
+        SeasonEntry new_season(0, season.full_name, season.name, std::move(thumbnail), time(nullptr));
         season_table->create(&new_season);
     }
 
@@ -85,7 +88,7 @@ void Library::sync()
 
             //Create the entry
             frlog << Log::info << "Found new episode for " << season->name << ": " << episode.name << Log::end;
-            EpisodeEntry new_episode(0, season->id, episode.full_name, episode.name, false, 0, AUDIO_TRACK_UNSET, SUB_TRACK_UNSET);
+            EpisodeEntry new_episode(0, season->id, episode.full_name, episode.name, false, 0, AUDIO_TRACK_UNSET, SUB_TRACK_UNSET, time(nullptr));
             episode_table->create(&new_episode);
         }
 

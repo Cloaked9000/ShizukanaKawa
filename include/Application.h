@@ -57,6 +57,11 @@ private:
     void load_history();
 
     /*!
+     * Loads the recently added window
+     */
+    void load_recently_added();
+
+    /*!
      * Clears all currently displayed UI entries within the
      * main scroll box.
      */
@@ -81,6 +86,7 @@ private:
     Gtk::FlowBox *results_list;
     Gtk::Button *home_button;
     Gtk::Button *history_button;
+    Gtk::Button *recently_added_button;
     Gtk::Viewport *results_viewport;
     Gtk::SearchEntry *search_bar;
     std::unique_ptr<VideoPlayerWidget> video_player;

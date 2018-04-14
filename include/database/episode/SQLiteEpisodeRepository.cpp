@@ -8,14 +8,14 @@ SQLiteEpisodeRepository::SQLiteEpisodeRepository(std::shared_ptr<SQLite3DB> data
 : database(std::move(database_))
 {
     //Create table and indexes
-    database->unsafe_query("CREATE TABLE IF NOT EXISTS episode(id INTEGER PRIMARY KEY AUTOINCREMENT, season_id INTEGER NOT NULL, filepath VARCHAR(4096) NOT NULL, name VARCHAR(4096) NOT NULL, watched BOOLEAN NOT NULL, watch_offset INTEGER NOT NULL, audio_track INTEGER NOT NULL, sub_track INTEGER NOT NULL, FOREIGN KEY(season_id) REFERENCES season(id));");
+    database->unsafe_query("CREATE TABLE IF NOT EXISTS episode(id INTEGER PRIMARY KEY AUTOINCREMENT, season_id INTEGER NOT NULL, filepath VARCHAR(4096) NOT NULL, name VARCHAR(4096) NOT NULL, watched BOOLEAN NOT NULL, watch_offset INTEGER NOT NULL, audio_track INTEGER NOT NULL, sub_track INTEGER NOT NULL, date_added DATE INTEGER NOT NULL, FOREIGN KEY(season_id) REFERENCES season(id));");
     database->unsafe_query("CREATE INDEX IF NOT EXISTS episode_filepath_index ON episode(filepath);");
 }
 
 uint64_t SQLiteEpisodeRepository::database_create(EpisodeEntry *entry)
 {
-    return database->insert_query("INSERT INTO episode VALUES(NULL, ?, ?, ?, ?, ?, ?, ?)",
-                                  {entry->season_id, entry->filepath, entry->name, entry->watched, entry->watch_offset, entry->audio_track, entry->sub_track});
+    return database->insert_query("INSERT INTO episode VALUES(NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                  {entry->season_id, entry->filepath, entry->name, entry->watched, entry->watch_offset, entry->audio_track, entry->sub_track, entry->date_added});
 }
 
 std::shared_ptr<EpisodeEntry> SQLiteEpisodeRepository::database_load(uint64_t entry_id)
@@ -29,13 +29,14 @@ std::shared_ptr<EpisodeEntry> SQLiteEpisodeRepository::database_load(uint64_t en
                                          results.at("watched").at(0).get<bool>(),
                                          results.at("watch_offset").at(0).get<uint64_t>(),
                                          results.at("audio_track").at(0).get<int64_t>(),
-                                         results.at("sub_track").at(0).get<int64_t>());
+                                         results.at("sub_track").at(0).get<int64_t>(),
+                                         results.at("date_added").at(0).get<time_t>());
 }
 
 void SQLiteEpisodeRepository::database_update(std::shared_ptr<EpisodeEntry> entry)
 {
-    database->query("UPDATE episode SET season_id=?, filepath=?, name=?, watched=?, watch_offset=?, audio_track=?, sub_track=? WHERE id=?",
-                    {entry->season_id, entry->filepath, entry->name, entry->watched, entry->watch_offset, entry->audio_track, entry->sub_track, entry->id});
+    database->query("UPDATE episode SET season_id=?, filepath=?, name=?, watched=?, watch_offset=?, audio_track=?, sub_track=?, date_added=? WHERE id=?",
+                    {entry->season_id, entry->filepath, entry->name, entry->watched, entry->watch_offset, entry->audio_track, entry->sub_track, entry->date_added, entry->id});
 }
 
 void SQLiteEpisodeRepository::database_erase(uint64_t entry_id)

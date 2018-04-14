@@ -8,14 +8,14 @@ SQLiteSeasonRepository::SQLiteSeasonRepository(std::shared_ptr<SQLite3DB> databa
 : database(std::move(database_))
 {
     //Create table and indexes
-    database->unsafe_query("CREATE TABLE IF NOT EXISTS season(id INTEGER PRIMARY KEY AUTOINCREMENT, filepath VARCHAR(4096) NOT NULL, name VARCHAR(4096) NOT NULL, thumbnail BLOB NOT NULL);");
+    database->unsafe_query("CREATE TABLE IF NOT EXISTS season(id INTEGER PRIMARY KEY AUTOINCREMENT, filepath VARCHAR(4096) NOT NULL, name VARCHAR(4096) NOT NULL, thumbnail BLOB NOT NULL, date_added DATE INTEGER NOT NULL);");
     database->unsafe_query("CREATE INDEX IF NOT EXISTS season_filepath_index ON season(filepath);");
 }
 
 uint64_t SQLiteSeasonRepository::database_create(SeasonEntry *entry)
 {
-    return database->insert_query("INSERT INTO season VALUES(NULL, ?, ?, ?)",
-                                  {entry->filepath, entry->name, DBType(false, 0, entry->thumbnail, DBType::BLOB)});
+    return database->insert_query("INSERT INTO season VALUES(NULL, ?, ?, ?, ?)",
+                                  {entry->filepath, entry->name, DBType(false, 0, entry->thumbnail, DBType::BLOB), entry->date_added});
 }
 
 std::shared_ptr<SeasonEntry> SQLiteSeasonRepository::database_load(uint64_t entry_id)
@@ -25,13 +25,14 @@ std::shared_ptr<SeasonEntry> SQLiteSeasonRepository::database_load(uint64_t entr
     return std::make_shared<SeasonEntry>(entry_id,
                                          results.at("filepath").at(0).get<std::string>(),
                                          results.at("name").at(0).get<std::string>(),
-                                         results.at("thumbnail").at(0).get<std::string>());
+                                         results.at("thumbnail").at(0).get<std::string>(),
+                                         results.at("date_added").at(0).get<time_t>());
 }
 
 void SQLiteSeasonRepository::database_update(std::shared_ptr<SeasonEntry> entry)
 {
-    database->query("UPDATE season SET filepath=?, name=?, thumbnail=? WHERE id=?",
-                    {entry->filepath, entry->name, entry->thumbnail, entry->id});
+    database->query("UPDATE season SET filepath=?, name=?, thumbnail=?, date_added=? WHERE id=?",
+                    {entry->filepath, entry->name, entry->thumbnail, entry->date_added, entry->id});
 }
 
 void SQLiteSeasonRepository::database_erase(uint64_t entry_id)
@@ -39,7 +40,7 @@ void SQLiteSeasonRepository::database_erase(uint64_t entry_id)
     database->query("DELETE FROM season WHERE id=?", {entry_id});
 }
 
-void SQLiteSeasonRepository::for_each_season(const std::function<bool(std::shared_ptr<SeasonEntry> )> &callback)
+void SQLiteSeasonRepository::for_each_season(const std::function<bool(std::shared_ptr<SeasonEntry>)> &callback)
 {
     std::vector<DBType> *id_column = nullptr;
     database->query("SELECT id FROM season ORDER BY UPPER(name)", {}, 100, [&](SQLite3DB::query_t &query) -> bool{

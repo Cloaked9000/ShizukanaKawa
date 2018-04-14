@@ -5,24 +5,23 @@
 #ifndef SFTPMEDIASTREAMER_LOG_H
 #define SFTPMEDIASTREAMER_LOG_H
 
-
-#include <cstdint>
+#include <string>
+#include <iostream>
 #include <fstream>
 #include <atomic>
-#include <iostream>
-#include <algorithm>
 #include <ctime>
+#include <fstream>
 #include <chrono>
+#include <algorithm>
 #include "SystemUtilities.h"
 #include "Config.h"
+#include "Types.h"
 
-#define LOG_DIR_PATH "logs/"
+template<typename Test, template<typename...> class Ref>
+struct is_specialization : std::false_type {};
 
-//Set frlog define shortcut
-#define frlog Log::logger
-
-//Define static members
-#define frlog_define() Log Log::logger; std::string Log::log_levels[Log::count]{"Info", "Warn", "Crit"};
+template<template<typename...> class Ref, typename... Args>
+struct is_specialization<Ref<Args...>, Ref>: std::true_type {};
 
 class Log
 {
@@ -40,10 +39,6 @@ public:
         end = 0,
     };
 
-    //Constructor/destructor
-    Log()
-            : lock(ATOMIC_FLAG_INIT){}
-
     //Disable copying/moving and whatnot
     void operator=(const Log &l)=delete;
     Log(const Log &l)=delete;
@@ -52,42 +47,49 @@ public:
     /*!
      * Initialises the logging class
      *
+     * @param log_directory The directory to create logs in. If it doesn't exist then it will be created.
      * @param replicate_to_stdout Should the log be repliacted to the standard output too?
      * @return True on successful initialisation, false on failure
      */
-    static bool init(bool replicate_to_stdout = true)
+    bool init(std::string log_directory_, bool replicate_to_stdout = true)
     {
-        Log::logger.max_log_size = 0;
-        Log::logger.log_retention = 0;
+        log_directory = std::move(log_directory_);
+        stdout_replication = replicate_to_stdout;
+        if(log_directory.empty() || (log_directory.back() != '/' && log_directory.back() != '\\'))
+        {
+            log_directory += '/';
+        }
+
+        max_log_size = 0;
+        log_retention = 0;
 
         //Create logs directory
-        if(!SystemUtilities::does_filepath_exist(LOG_DIR_PATH))
+        if(!SystemUtilities::does_filepath_exist(log_directory))
         {
-            if(!SystemUtilities::create_directory(LOG_DIR_PATH))
+            if(!SystemUtilities::create_directory(log_directory))
             {
-                std::cout << "Failed to create '" << LOG_DIR_PATH << "' directory. Exiting." << std::endl;
+                std::cout << "Failed to create '" << log_directory << "' directory. Exiting." << std::endl;
                 return false;
             }
         }
 
         //Open a new log file
-        Log::logger.logpath = LOG_DIR_PATH + suggest_log_filename();
-        Log::logger.logstream.open(Log::logger.logpath);
-        Log::logger.stdout_replication = replicate_to_stdout;
-        if(!Log::logger.logstream.is_open())
+        logpath = log_directory + suggest_log_filename();
+        logstream.open(logpath);
+        if(!logstream.is_open())
         {
-            std::cout << "Failed to open " << Log::logger.logpath << " for logging!" << std::endl;
+            std::cout << "Failed to open " << logpath << " for logging!" << std::endl;
             return false;
         }
-        frlog << " -- Logging initialised -- " << Log::end;
+        *this << " -- Logging initialised -- " << Log::end;
 
         //Read config
-        auto &config = Config::get_instance();
+        Config &config = Config::get_instance();
         try
         {
             //Read disk settings
-            Log::logger.max_log_size = config.get<uint64_t>(CONFIG_MAX_LOG_SIZE);
-            Log::logger.log_retention = config.get<uint32_t>(CONFIG_LOG_RETENTION);
+            max_log_size = config.get<uint64_t>(CONFIG_MAX_LOG_SIZE);
+            log_retention = config.get<uint32_t>(CONFIG_LOG_RETENTION);
         }
         catch(const std::exception &e)
         {
@@ -95,7 +97,7 @@ public:
         }
 
         //Delete old logs
-        Log::logger.purge_old_logs();
+        purge_old_logs();
         return true;
     }
 
@@ -104,7 +106,7 @@ public:
      *
      * @return The timestamp in format YYYY-MM-DD HH:MM:SS
      */
-    static std::string get_current_timestamp()
+    std::string get_current_timestamp()
     {
         //Get the current timestamp
         std::time_t time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -130,7 +132,7 @@ public:
      *
      * @return A suitable log name
      */
-    static std::string suggest_log_filename()
+    std::string suggest_log_filename()
     {
         std::string timestamp = get_current_timestamp();
         std::replace(timestamp.begin(), timestamp.end(), ':', '-');
@@ -141,47 +143,40 @@ public:
     template<typename T>
     inline Log &operator<<(const T &data)
     {
-        commit_log(std::to_string(data));
-        return Log::logger;
-    }
+        (void)data;
+        if constexpr (is_specialization<T, std::atomic>())
+        {
+            *this << data.load();
+        }
+        else if constexpr (std::is_same<T, Level>())
+        {
+            //Spinlock using atomic flag, the inline asm is used to pause slightly so we don't waste too many CPU cycles
+            while(lock.test_and_set(std::memory_order_acquire))
+                    asm volatile("pause\n": : :"memory");
 
-    inline Log &operator<<(const std::basic_string<char> &data)
-    {
-        commit_log(data);
-        return Log::logger;
-    }
+            static std::string log_levels[] = {"Info", "Warn", "Crit"}; //String log levels
+            commit_log("[" + get_current_timestamp() + " " + log_levels[data] + "]: "); //data = log level enum
+        }
+        else if constexpr (std::is_same<T, End>())
+        {
+            //End log and release lock
+            commit_log("\n", true);
+            lock.clear(std::memory_order_release);
+        }
+        else
+        {
+            commit_log(data);
+        }
 
-    Log &operator<<(const char *data)
-    {
-        commit_log(data);
-        return Log::logger;
-    }
-
-    Log &operator<<(Level loglevel)
-    {
-        //Spinlock using atomic flag, the inline asm is used to pause slightly so we don't waste too many CPU cycles
-        while(lock.test_and_set(std::memory_order_acquire))
-                asm volatile("pause\n": : :"memory");
-
-        commit_log("[" + get_current_timestamp() + " " + log_levels[loglevel] + "]: ");
-
-        return Log::logger;
-    }
-
-    Log &operator<<(End)
-    {
-        //End log and release lock
-        commit_log("\n", true);
-        lock.clear(std::memory_order_release);
-        return Log::logger;
+        return *this;
     }
 
     /*!
      * Flush the log out stream
      */
-    static void flush()
+    void flush()
     {
-        Log::logger.logstream.flush();
+        logstream.flush();
     }
 
     /*!
@@ -190,14 +185,27 @@ public:
      *
      * @param val 0 for no limit. Otherwise the number of bytes before cycling.
      */
-    static void set_max_log_size(uint64_t val)
+    void set_max_log_size(uint64_t val)
     {
-        Log::logger.max_log_size = val;
+        max_log_size = val;
     }
 
-    //The single instance of the class which will be used
-    static Log logger;
+    /*!
+     * Gets the logger instance
+     *
+     * @return The logger instance
+     */
+    static Log &get_instance()
+    {
+        static Log logger;
+        return logger;
+    }
 private:
+
+    //Constructor/destructor
+    Log()
+    : lock(ATOMIC_FLAG_INIT){}
+
     /*!
      * Deletes logs which are out of retention
      */
@@ -207,24 +215,24 @@ private:
         {
             //Get a list of logs
             std::vector<std::string> log_files;
-            if(!SystemUtilities::list_files(LOG_DIR_PATH, log_files))
-                throw std::runtime_error("Failed to enumerate files in: " + std::string(LOG_DIR_PATH));
+            if(!SystemUtilities::list_files(log_directory, log_files))
+                throw std::runtime_error("Failed to enumerate files in: " + std::string(log_directory));
 
             //If there's more than retention allows, delete some
             if(log_files.size() >= log_retention)
             {
                 //Sort files by modification date
-                std::sort(log_files.begin(), log_files.end(), [](const auto &f1, const auto &f2){
-                    return SystemUtilities::get_modification_date(LOG_DIR_PATH + f1) < SystemUtilities::get_modification_date(LOG_DIR_PATH + f2);
+                std::sort(log_files.begin(), log_files.end(), [&](const auto &f1, const auto &f2){
+                    return SystemUtilities::get_modification_date(log_directory + f1) < SystemUtilities::get_modification_date(log_directory + f2);
                 });
 
                 //Erase oldest ones
                 for(size_t a = 0; a < log_files.size() - log_retention; a++)
                 {
-                    if(std::remove(std::string(LOG_DIR_PATH + log_files[a]).c_str()) != 0)
-                        throw std::runtime_error("Failed to erase old log file: " + std::string(LOG_DIR_PATH) + log_files[a] + ". Errno: " + std::to_string(errno));
+                    if(std::remove(std::string(log_directory + log_files[a]).c_str()) != 0)
+                        throw std::runtime_error("Failed to erase old log file: " + std::string(log_directory) + log_files[a] + ". Errno: " + std::to_string(errno));
                     else
-                        std::cout << "Erased log file: " << LOG_DIR_PATH << log_files[a] << std::endl;
+                        std::cout << "Erased log file: " << log_directory << log_files[a] << std::endl;
                 }
 
             }
@@ -238,7 +246,8 @@ private:
      * @param data The data to log
      * @param may_cycle True of the logs should be cycled if over limit
      */
-    inline void commit_log(const std::string &data, bool may_cycle = false)
+    template<typename T>
+    inline void commit_log(const T &data, bool may_cycle = false)
     {
         //Print it
         if(stdout_replication)
@@ -259,16 +268,16 @@ private:
     {
         //Close current log file and open new one
         logstream.close();
-        logpath = LOG_DIR_PATH + suggest_log_filename();
-        logstream.open(Log::logger.logpath);
-        if(!Log::logger.logstream.is_open())
+        logpath = log_directory + suggest_log_filename();
+        logstream.open(logpath);
+        if(!logstream.is_open())
             throw std::runtime_error("Failed to open new log file: " + logpath);
 
         //Delete old logs if needbe
         purge_old_logs();
     }
 
-    static std::string log_levels[]; //String log levels
+    std::string log_directory; //Directory to create logs in, ends in a /
     std::atomic_flag lock; //Atomic flag used for thread safe logging using a spinlock
     std::ofstream logstream; //Out output stream
     bool stdout_replication{true}; //Should logs also be sent to stdout?
@@ -277,7 +286,8 @@ private:
     std::atomic<uint32_t> log_retention{}; //Number of log iterations to keep
 };
 
-
+//Set frlog define shortcut
+#define frlog Log::get_instance()
 
 
 #endif //SFTPMEDIASTREAMER_LOG_H

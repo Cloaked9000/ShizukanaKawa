@@ -10,6 +10,7 @@
 #include <database/season/SeasonRepository.h>
 #include <database/episode/EpisodeRepository.h>
 #include <database/watch_history/WatchHistoryRepository.h>
+#include <database/MiscRepository.h>
 #include "SFTPSession.h"
 #include "Thumbnailer.h"
 
@@ -21,7 +22,8 @@ public:
             std::string library_root,
             std::shared_ptr<SeasonRepository> season_table,
             std::shared_ptr<EpisodeRepository> episode_table,
-            std::shared_ptr<WatchHistoryRepository> watch_history_table);
+            std::shared_ptr<WatchHistoryRepository> watch_history_table,
+            std::shared_ptr<MiscRepository> misc_table);
 
     /*!
      * Syncs the season table with what's actually on disk
@@ -74,6 +76,18 @@ public:
     }
 
     /*!
+     * Iterate through seasons which have been recently added, and
+     * seasons which have recently had new episodes added.
+     *
+     * @param callback The callback to call for each entry. Should return true if it wants more
+     * entries, false if it has had enough.
+     */
+    inline void for_each_recently_added(const std::function<bool(std::shared_ptr<SeasonEntry>)> &callback)
+    {
+        misc_table->for_each_recently_added(callback);
+    }
+
+    /*!
      * Adds an episode to the watch history list
      *
      * @param episode_id The episode ID to add to the watch history
@@ -102,6 +116,7 @@ private:
     std::shared_ptr<SeasonRepository> season_table;
     std::shared_ptr<EpisodeRepository> episode_table;
     std::shared_ptr<WatchHistoryRepository> watch_history_table;
+    std::shared_ptr<MiscRepository> misc_table;
 };
 
 
