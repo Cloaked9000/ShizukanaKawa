@@ -21,6 +21,14 @@ public:
      * entries, false if it has had enough.
      */
     virtual void for_each_recently_added(const std::function<bool(std::shared_ptr<SeasonEntry>)> &callback) =0;
+
+    /*!
+     * Iterate through seasons which have been recently watched.
+     *
+     * @param callback The callback to call for each entry. Should return true if it wants more
+     * entries, false if it has had enough.
+     */
+    virtual void for_each_recently_watched(const std::function<bool(std::shared_ptr<SeasonEntry>)> &callback) =0;
 };
 
 

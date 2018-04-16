@@ -39,6 +39,14 @@ public:
     void delete_season(uint64_t season_id);
 
     /*!
+     * Deletes a episode with a given ID
+     * (in database, not disk)
+     *
+     * @param season_id The ID of the episode to delete
+     */
+    void delete_episode(uint64_t episode_id);
+
+    /*!
      * Iterate through every season in the library
      *
      * @param callback The callback to call for each entry. Should return true if it wants more
@@ -47,6 +55,17 @@ public:
     inline void for_each_season(const std::function<bool(std::shared_ptr<SeasonEntry>)> &callback)
     {
         season_table->for_each_season(callback);
+    }
+
+    /*!
+     * Iterate through every recently watched season
+     *
+     * @param callback The callback to call for each entry. Should return true if it wants more
+     * entries, false if it has had enough.
+     */
+    inline void for_each_recently_watched(const std::function<bool(std::shared_ptr<SeasonEntry>)> &callback)
+    {
+        misc_table->for_each_recently_watched(callback);
     }
 
     /*!

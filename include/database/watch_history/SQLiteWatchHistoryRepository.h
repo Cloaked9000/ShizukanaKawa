@@ -55,6 +55,13 @@ public:
      */
     void for_each_entry(bool unique, const std::function<bool(std::shared_ptr<WatchHistoryEntry>)> &callback) override;
 
+    /*!
+     * Erases watch history for a given episode ID
+     *
+     * @param episode_id The ID of the episode to delete history for
+     */
+    void erase_for_episode(uint64_t episode_id) override;
+
 private:
     std::shared_ptr<SQLite3DB> database;
 };

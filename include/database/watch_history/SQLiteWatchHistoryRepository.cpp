@@ -55,6 +55,11 @@ void SQLiteWatchHistoryRepository::for_each_entry(bool unique, const std::functi
                 return false;
         }
 
-        return false; //100 entries is enough
+        return false;
     });
+}
+
+void SQLiteWatchHistoryRepository::erase_for_episode(uint64_t episode_id)
+{
+    database->query("DELETE FROM watch_history WHERE episode_id=?", {episode_id});
 }

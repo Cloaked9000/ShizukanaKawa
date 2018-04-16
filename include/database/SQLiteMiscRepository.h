@@ -26,6 +26,14 @@ public:
      */
     void for_each_recently_added(const std::function<bool(std::shared_ptr<SeasonEntry>)> &callback) final;
 
+    /*!
+     * Iterate through seasons which have been recently watched.
+     *
+     * @param callback The callback to call for each entry. Should return true if it wants more
+     * entries, false if it has had enough.
+     */
+    void for_each_recently_watched(const std::function<bool(std::shared_ptr<SeasonEntry>)> &callback) final;
+
 private:
 
     std::shared_ptr<SQLite3DB> database;

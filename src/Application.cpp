@@ -85,16 +85,7 @@ void Application::load_history()
     clear();
     frlog << Log::info << "Loading history screen" << Log::end;
 
-    std::set<uint64_t> seasons_shown;
-    library->for_each_watch_history_entry(true, [&](std::shared_ptr<WatchHistoryEntry> episode) -> bool {
-
-        //We list the seasons watched, so load the season entry
-        std::shared_ptr<SeasonEntry> season = library->get_episode_season(episode->episode_id);
-
-        //Skip adding a tile if this season is already present
-        if(seasons_shown.find(season->id) != seasons_shown.end())
-            return true;
-        seasons_shown.emplace(season->id);
+    library->for_each_recently_watched([&](std::shared_ptr<SeasonEntry> season) -> bool {
 
         //Create a season entry tile, and connect it to a season display handler
         auto season_listing = std::make_shared<SeasonListingWidget>(season);
@@ -106,7 +97,7 @@ void Application::load_history()
         results_list->add(*season_listing);
         listed_results.emplace_back(std::move(season_listing));
 
-        return true;
+        return listed_results.size() < 50;
     });
 
     results_list->show_all();
@@ -135,7 +126,7 @@ void Application::load_recently_added()
         results_list->add(*season_listing);
         listed_results.emplace_back(std::move(season_listing));
 
-        return true;
+        return listed_results.size() < 50;
     });
 
     results_list->show_all();
@@ -149,6 +140,20 @@ bool Application::signal_library_listing_clicked(GdkEventButton * /*button*/,
 
     //Add in library tile's entries
     library->for_each_episode_in_season(season_listing->get_season_entry()->id, [&](std::shared_ptr<EpisodeEntry> episode) -> bool {
+
+        //Check that this episode still exists on the server
+        try
+        {
+            sftp->stat(episode->filepath);
+        }
+        catch(...)
+        {
+            //It no longer exists, erase it
+            frlog << Log::info << "Deleting removed episode: " << episode->name << Log::end;
+            library->delete_episode(episode->id);
+            return true;
+        }
+
 
         //Create a widget to display the episode
         auto episode_listing = std::make_shared<EpisodeListingWidget>(episode);

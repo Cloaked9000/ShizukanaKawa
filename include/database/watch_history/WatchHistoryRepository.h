@@ -21,6 +21,13 @@ public:
      * It should return true if it wants more entries, or false if it has had enough.
      */
     virtual void for_each_entry(bool unique, const std::function<bool(std::shared_ptr<WatchHistoryEntry>)> &callback) =0;
+
+    /*!
+     * Erases watch history for a given episode ID
+     *
+     * @param episode_id The ID of the episode to delete history for
+     */
+    virtual void erase_for_episode(uint64_t episode_id)=0;
 };
 
 

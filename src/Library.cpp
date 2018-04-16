@@ -128,21 +128,22 @@ std::string Library::generate_season_thumbnail(const std::string &remote_filepat
 
 void Library::delete_season(uint64_t season_id)
 {
-    //Iterate through all watch history and erase
-    watch_history_table->for_each_entry(false, [&](const std::shared_ptr<WatchHistoryEntry> &episode) -> bool {
-        watch_history_table->erase(episode->id);
-        return true;
-    });
-
     //Iterate through each episode of the season and delete those
     episode_table->for_each_episode_in_season(season_id, [&](const std::shared_ptr<EpisodeEntry> &episode) -> bool {
-        episode_table->erase(episode->id);
+        delete_episode(episode->id);
         return true;
     });
 
     //Now the season itself
     season_table->erase(season_id);
 }
+
+void Library::delete_episode(uint64_t episode_id)
+{
+    watch_history_table->erase_for_episode(episode_id);
+    episode_table->erase(episode_id);
+}
+
 
 std::shared_ptr<SeasonEntry> Library::get_episode_season(uint64_t episode_id)
 {
