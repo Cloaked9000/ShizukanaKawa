@@ -41,8 +41,17 @@ int main(int argc, char** argv)
 
     //Start SFTP connection. Note: Only keyring is supported at the moment. So identity should be loaded prior to starting.
     SSHConnection connection;
-    connection.connect(config.get<std::string>(CONFIG_SFTP_IP), config.get<uint32_t>(CONFIG_SFTP_PORT), config.get<std::string>(CONFIG_SFTP_USERNAME));
-    auto sftp = std::make_shared<SFTPSession>(&connection);
+    std::shared_ptr<SFTPSession> sftp;
+    try
+    {
+        connection.connect(config.get<std::string>(CONFIG_SFTP_IP), config.get<uint32_t>(CONFIG_SFTP_PORT), config.get<std::string>(CONFIG_SFTP_USERNAME));
+        sftp = std::make_shared<SFTPSession>(&connection);
+    }
+    catch(const std::exception &e)
+    {
+        frlog << Log::crit << "Failed to connect to SFTP server: " << e.what() << Log::end;
+        return EXIT_FAILURE;
+    }
 
     //Initialise database repositories
     auto season_table = std::make_shared<SQLiteSeasonRepository>(database);

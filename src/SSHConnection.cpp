@@ -119,7 +119,7 @@ bool SSHConnection::verify_hostname(ssh_session session)
     int ret;
 
     state = ssh_is_server_known(session);
-    ret = ssh_get_publickey(session, &pub_key);
+    ret = ssh_get_server_publickey(session, &pub_key);
     if(ret < 0)
         throw std::runtime_error("ssh_get_publickey() failed: " + std::string(ssh_get_error(session)));
 
