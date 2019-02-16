@@ -17,7 +17,8 @@
 class VideoControlWidget : public Gtk::Box
 {
 public:
-    explicit VideoControlWidget(VideoWidget *video);
+    explicit VideoControlWidget(std::shared_ptr<VideoWidget> video);
+    ~VideoControlWidget() override;
 
 private:
     //Members
@@ -48,8 +49,13 @@ private:
     Glib::RefPtr<Gdk::Pixbuf> play_icon;
     Glib::RefPtr<Gdk::Pixbuf> stop_icon;
 
+    //Signal handlers
+    sigc::connection pause_button_signal;
+    sigc::connection stop_button_signal;
+    sigc::connection seek_bar_signal;
+
     //Dependencies
-    VideoWidget *video;
+    std::shared_ptr<VideoWidget> video;
 };
 
 

@@ -8,7 +8,7 @@
 #include "VideoWidget.h"
 
 
-VideoWidget::VideoWidget(size_t parent_window_id, sf::InputStream *stream)
+VideoWidget::VideoWidget(size_t parent_window_id, std::unique_ptr<sf::InputStream> stream)
 : Glib::ObjectBase("videoplayer"),
   Gtk::Widget(),
   VideoPlayer(parent_window_id)
@@ -18,18 +18,20 @@ VideoWidget::VideoWidget(size_t parent_window_id, sf::InputStream *stream)
     set_vexpand(true);
 
     //Open video
-    open_from_stream(*stream, {});
+    open_from_stream(std::move(stream), {});
 
     //Setup update to be called periodically
     video_updater = Glib::signal_timeout().connect([&]() -> bool {update(); state_update_signal.emit(SignalType::Tick); return true;}, 50);
 
     //Setup callbacks
-    signal_key_press_event().connect(sigc::mem_fun(this, &VideoWidget::key_press_callback));
+    key_callback = signal_key_press_event().connect(sigc::mem_fun(this, &VideoWidget::key_press_callback));
+    state_update_signal.emit(SignalType::Playing);
 }
 
 VideoWidget::~VideoWidget()
 {
     video_updater.disconnect();
+    key_callback.disconnect();
 }
 
 Gtk::SizeRequestMode VideoWidget::get_request_mode_vfunc() const
@@ -137,20 +139,20 @@ bool VideoWidget::on_draw(const Cairo::RefPtr<Cairo::Context> &)
 
 void VideoWidget::play()
 {
-    VideoPlayer::play();
     state_update_signal.emit(SignalType::Playing);
+    VideoPlayer::play();
 }
 
 void VideoWidget::pause()
 {
-    VideoPlayer::pause();
     state_update_signal.emit(SignalType::Paused);
+    VideoPlayer::pause();
 }
 
 void VideoWidget::stop()
 {
-    VideoPlayer::stop();
     state_update_signal.emit(SignalType::Stopped);
+    VideoPlayer::stop();
 }
 
 void VideoWidget::mouse_moved(size_t x, size_t y)

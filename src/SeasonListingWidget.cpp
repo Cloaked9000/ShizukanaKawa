@@ -33,13 +33,13 @@ SeasonListingWidget::SeasonListingWidget(std::shared_ptr<SeasonEntry> season_)
 void SeasonListingWidget::update()
 {
     //Setup search tag/tooltip and label
-    set_search_string(season_entry->name);
-    set_tooltip_text(season_entry->name);
-    entry_label.set_text(season_entry->name);
+    set_search_string(season_entry->get_name());
+    set_tooltip_text(season_entry->get_name());
+    entry_label.set_text(season_entry->get_name());
 
     //Load thumbnail
     auto thumbnail_loader = Gdk::PixbufLoader::create();
-    thumbnail_loader->write(reinterpret_cast<const guint8 *>(season_entry->thumbnail.data()), season_entry->thumbnail.size());
+    thumbnail_loader->write(reinterpret_cast<const guint8 *>(season_entry->get_thumbnail().data()), season_entry->get_thumbnail().size());
     thumbnail_loader->close();
     season_cover.set(thumbnail_loader->get_pixbuf());
 }

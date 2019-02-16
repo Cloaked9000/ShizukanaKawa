@@ -21,15 +21,17 @@
 
 Application::Application(BaseObjectType *cobject,
                          const Glib::RefPtr<Gtk::Builder> &refBuilder,
-                         Gtk::Window *window_,
                          std::shared_ptr<Library> library_,
                          std::shared_ptr<SFTPSession> sftp_)
 : Gtk::Window(cobject),
   builder(refBuilder),
   library(std::move(library_)),
-  sftp(std::move(sftp_)),
-  window(window_)
+  sftp(std::move(sftp_))
 {
+    //Load icon
+    auto icon = Gdk::Pixbuf::create_from_file("resources/icon.png");
+    set_icon(icon);
+
     //Load results box from Glade file to fill it in
     builder->get_widget("flow_box", results_list);
     builder->get_widget("home_button", home_button);
@@ -52,8 +54,6 @@ Application::Application(BaseObjectType *cobject,
 Application::~Application()
 {
     video_player = nullptr;
-    video_stream = nullptr;
-    video_source = nullptr;
 }
 
 void Application::load_home()
@@ -112,9 +112,9 @@ void Application::load_recently_added()
     library->for_each_recently_added([&](std::shared_ptr<SeasonEntry> season) -> bool {
 
         //Skip adding a tile if this season is already present
-        if(seasons_shown.find(season->id) != seasons_shown.end())
+        if(seasons_shown.find(season->get_id()) != seasons_shown.end())
             return true;
-        seasons_shown.emplace(season->id);
+        seasons_shown.emplace(season->get_id());
 
         //Create a season entry tile, and connect it to a season display handler
         auto season_listing = std::make_shared<SeasonListingWidget>(season);
@@ -132,25 +132,36 @@ void Application::load_recently_added()
     results_list->show_all();
 }
 
-bool Application::signal_library_listing_clicked(GdkEventButton * /*button*/,
+bool Application::signal_library_listing_clicked(GdkEventButton *button,
                                                  std::shared_ptr<SeasonListingWidget> season_listing)
 {
+    //If it's a right click then it's a 'set unwatched' request
+    if(button->button == RIGHT_CLICK)
+    {
+        frlog << Log::info << "Regenerating season thumbnail for: " << season_listing->get_season_entry()->get_name() << Log::end;
+        season_listing->get_season_entry()->set_thumbnail(library->generate_season_thumbnail(season_listing->get_season_entry()->get_filepath()));
+        season_listing->update();
+        return true;
+    }
+
+
+    //Else load episode selector
     clear();
     frlog << Log::info << "Loading season screen" << Log::end;
 
     //Add in library tile's entries
-    library->for_each_episode_in_season(season_listing->get_season_entry()->id, [&](std::shared_ptr<EpisodeEntry> episode) -> bool {
+    library->for_each_episode_in_season(season_listing->get_season_entry()->get_id(), [&](std::shared_ptr<EpisodeEntry> episode) -> bool {
 
         //Check that this episode still exists on the server
         try
         {
-            sftp->stat(episode->filepath);
+            sftp->stat(episode->get_filepath());
         }
         catch(...)
         {
             //It no longer exists, erase it
-            frlog << Log::info << "Deleting removed episode: " << episode->name << Log::end;
-            library->delete_episode(episode->id);
+            frlog << Log::info << "Deleting removed episode: " << episode->get_name() << Log::end;
+            library->delete_episode(episode->get_id());
             return true;
         }
 
@@ -182,30 +193,35 @@ bool Application::signal_episode_listing_clicked(GdkEventButton *button,
     //If it's a right click then it's a 'set unwatched' request
     if(button->button == RIGHT_CLICK)
     {
-        frlog << Log::info << "Marked " << episode_listing->get_episode_entry()->name << " as unwatched at user request" << Log::end;
-        episode_listing->get_episode_entry()->watched = false;
+        frlog << Log::info << "Marked " << episode_listing->get_episode_entry()->get_name() << " as unwatched at user request" << Log::end;
+        episode_listing->get_episode_entry()->set_watched(false);
+        episode_listing->get_episode_entry()->set_watch_offset(0);
         episode_listing->update();
         return true;
     }
 
     //Else, play this episode
-    frlog << Log::info << "Playing " << episode_listing->get_episode_entry()->name << Log::end;
-    episode_listing->get_episode_entry()->watched = true;
+    frlog << Log::info << "Playing " << episode_listing->get_episode_entry()->get_name() << Log::end;
+    episode_listing->get_episode_entry()->set_watched(true);
     episode_listing->update();
-    library->add_to_watched(episode_listing->get_episode_entry()->id);
+    library->add_to_watched(episode_listing->get_episode_entry()->get_id());
 
     Gtk::Container::remove(*window_box);
     add(video_box);
 
     //Setup the video widget and file stream
-    video_source = std::make_unique<SFTPFile>(sftp->open(episode_listing->get_episode_entry()->filepath));
-    video_stream = std::make_unique<SFTPStream>(video_source.get()); //todo: abstract, accept sf::InputStream from library instead
-    video_player = std::make_unique<VideoPlayerWidget>(GDK_WINDOW_XID(get_window()->gobj()), video_stream.get());
+    current_playing = episode_listing->get_episode_entry();
+    auto video_source = std::make_unique<SFTPFile>(sftp->open(current_playing->get_filepath()));
+    auto video_stream = std::make_unique<SFTPStream>(std::move(video_source)); //todo: abstract, accept sf::InputStream from library instead
+    video_player = std::make_unique<VideoPlayerWidget>(GDK_WINDOW_XID(get_window()->gobj()), std::move(video_stream));
     video_player->signal_playback_state_changed().connect(sigc::mem_fun(this, &Application::signal_play_state_changed));
+    video_player->set_playback_offset(current_playing->get_watch_offset());
+    video_player->set_audio_track(current_playing->get_audio_track());
+    video_player->set_subtitle_track(current_playing->get_sub_track());
     video_box.add(*video_player);
     video_box.show_all();
 
-    get_window()->set_title(std::string(WINDOW_TITLE) + " - " + episode_listing->get_episode_entry()->name);
+    get_window()->set_title(std::string(WINDOW_TITLE) + " - " + current_playing->get_name());
     return true;
 }
 
@@ -242,12 +258,20 @@ void Application::signal_play_state_changed(VideoWidget::SignalType state)
     //If the video is stopped, then restore the episode select menu, and the original window title
     if(state == VideoWidget::Stopped)
     {
-        frlog << Log::info << "Unloading video" << Log::end;
+        //Update episode object with new playback offset/subtrack/audio track etc
+        if(current_playing)
+        {
+            frlog << Log::info << "Unloading video: " << current_playing->get_name() << Log::end;
+            current_playing->set_audio_track(video_player->get_audio_track());
+            current_playing->set_sub_track(video_player->get_subtitle_track());
+            current_playing->set_watch_offset(video_player->get_playback_offset());
+        }
+
+        //Update UI
         Gtk::Container::remove(video_box);
         add(*window_box);
         video_player = nullptr;
-        video_stream = nullptr;
-        video_source = nullptr;
+        current_playing = nullptr;
         get_window()->set_title(WINDOW_TITLE);
     }
 }

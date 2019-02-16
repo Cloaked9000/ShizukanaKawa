@@ -9,24 +9,24 @@
 #include <Types.h>
 #include "VideoControlWidget.h"
 
-VideoControlWidget::VideoControlWidget(VideoWidget *video_)
+VideoControlWidget::VideoControlWidget(std::shared_ptr<VideoWidget> video_)
+: video(std::move(video_))
 {
-    video = video_;
     pause_icon = Gdk::Pixbuf::create_from_file("resources/pause_icon.png");
     play_icon = Gdk::Pixbuf::create_from_file("resources/play_icon.png");
     stop_icon = Gdk::Pixbuf::create_from_file("resources/stop_icon.png");
 
     pause_button.set(pause_icon);
     pause_button_box.add(pause_button);
-    pause_button_box.signal_button_press_event().connect(sigc::mem_fun(*this, &VideoControlWidget::pause_button_click_callback));
+    pause_button_signal = pause_button_box.signal_button_press_event().connect(sigc::mem_fun(*this, &VideoControlWidget::pause_button_click_callback));
 
     stop_button.set(stop_icon);
     stop_button_box.add(stop_button);
-    stop_button_box.signal_button_press_event().connect(sigc::mem_fun(*this, &VideoControlWidget::stop_button_click_callback));
+    stop_button_signal = stop_button_box.signal_button_press_event().connect(sigc::mem_fun(*this, &VideoControlWidget::stop_button_click_callback));
 
     seek_bar_update_clock = Glib::signal_timeout().connect(sigc::mem_fun(this, &VideoControlWidget::update_seek_bar), 100);
     seek_bar_box.add(seek_bar);
-    seek_bar_box.signal_button_press_event().connect(sigc::mem_fun(this, &VideoControlWidget::seek_bar_click_callback));
+    seek_bar_signal = seek_bar_box.signal_button_press_event().connect(sigc::mem_fun(this, &VideoControlWidget::seek_bar_click_callback));
 
     button_control_box.set_orientation(Gtk::Orientation::ORIENTATION_HORIZONTAL);
     button_control_box.add(video_offset_label);
@@ -39,6 +39,13 @@ VideoControlWidget::VideoControlWidget(VideoWidget *video_)
     add(button_control_box);
     set_orientation(Gtk::Orientation::ORIENTATION_VERTICAL);
     set_hexpand(true);
+}
+
+VideoControlWidget::~VideoControlWidget()
+{
+    pause_button_signal.disconnect();
+    stop_button_signal.disconnect();
+    seek_bar_signal.disconnect();
 }
 
 bool VideoControlWidget::update_seek_bar()
@@ -83,7 +90,7 @@ bool VideoControlWidget::pause_button_click_callback(GdkEventButton *)
     return true;
 }
 
-bool VideoControlWidget::stop_button_click_callback(GdkEventButton * /*button*/)
+bool VideoControlWidget::stop_button_click_callback(GdkEventButton *)
 {
     if(!video || video->is_fullscreen()) //Disabled in fullscreen mode at the moment as it causes a crash
         return true;

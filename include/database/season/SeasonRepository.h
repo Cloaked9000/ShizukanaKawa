@@ -20,7 +20,7 @@ public:
      * @param callback The callback to call for each row. Should return true
      * if more rows are wanted, false if it's finished.
      */
-    virtual void for_each_season(const std::function<bool(std::shared_ptr<SeasonEntry> )> &callback)=0;
+    virtual void for_each_season(const std::function<bool(std::shared_ptr<SeasonEntry> )> callback)=0;
 
     /*!
      * Tries to get the ID of a season from its filepath

@@ -44,6 +44,8 @@ std::vector<Attributes> SFTPSession::enumerate_directory(const std::string &file
         object.name = attributes->name;
         object.full_name = filepath + "/" + object.name;
         object.type = static_cast<Attributes::Type>(attributes->type);
+        object.mod_date = attributes->mtime;
+        object.access_date = attributes->atime;
         sftp_attributes_free(attributes);
         if(object.name != "." && object.name != "..")
             ret.emplace_back(std::move(object));
@@ -85,6 +87,8 @@ Attributes SFTPSession::stat(const std::string &filepath)
     attr.name = filepath;
     attr.full_name = filepath;
     attr.size = attributes->size;
+    attr.mod_date = attributes->mtime64;
+    attr.access_date = attributes->atime64;
     attr.type = static_cast<Attributes::Type>(attributes->type);
 
     sftp_attributes_free(attributes);

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <utility>
 #include <cstring>
+#include <Log.h>
 #include "SFTPFile.h"
 
 SFTPFile::SFTPFile(sftp_file file_, Attributes attributes_)
@@ -104,21 +105,15 @@ size_t SFTPFile::get_async_buffer_size()
     return async_buffer.size();
 }
 
-size_t SFTPFile::read(void *buff, size_t buffsz)
+ssize_t SFTPFile::read(void *buff, size_t buffsz)
 {
     if(!is_open())
-        return 0;
+        return -1;
 
     ssize_t actual = sftp_read(file, buff, buffsz);
-    if (actual == 0)
+    if(actual < 0)
     {
-        return 0;
-    }
-    else if (actual < 0)
-    {
-        throw std::runtime_error("Error while reading file: " + std::string(ssh_get_error(file)));
-        sftp_close(file);
-        return SSH_ERROR;
+        frlog << Log::crit << "Error while reading file: " + std::string(ssh_get_error(file)) << Log::end;
     }
 
     return actual;

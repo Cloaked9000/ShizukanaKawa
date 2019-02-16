@@ -23,6 +23,8 @@ struct Attributes
     std::string full_name;
     size_t size;
     Type type;
+    time_t mod_date;
+    time_t access_date;
 
     explicit operator std::string() const
     {

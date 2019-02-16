@@ -34,7 +34,7 @@ public:
      *
      * @param stream The video stream to play
      */
-    VideoWidget(size_t parent_window_id, sf::InputStream *stream);
+    VideoWidget(size_t parent_window_id, std::unique_ptr<sf::InputStream> stream);
     ~VideoWidget() override;
 
     state_update_signal_t signal_playback_state_changed();
@@ -95,6 +95,7 @@ protected:
     //State
     Glib::RefPtr<Gdk::Window> gdk_window;
     sigc::connection video_updater;
+    sigc::connection key_callback;
     state_update_signal_t state_update_signal;
 };
 

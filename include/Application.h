@@ -40,7 +40,6 @@ public:
      */
     Application(BaseObjectType* cobject,
                 const Glib::RefPtr<Gtk::Builder>& refBuilder,
-                Gtk::Window *window,
                 std::shared_ptr<Library> library,
                 std::shared_ptr<SFTPSession> sftp);
     ~Application() override;
@@ -90,8 +89,7 @@ private:
     Gtk::Viewport *results_viewport;
     Gtk::SearchEntry *search_bar;
     std::unique_ptr<VideoPlayerWidget> video_player;
-    std::unique_ptr<SFTPFile> video_source;
-    std::unique_ptr<SFTPStream> video_stream;
+    std::shared_ptr<EpisodeEntry> current_playing;
     Gtk::Box *window_box;
     Gtk::EventBox video_box;
 
@@ -102,7 +100,6 @@ private:
     //Dependencies
     std::shared_ptr<Library> library;
     std::shared_ptr<SFTPSession> sftp;
-    Gtk::Window *window;
 
     void signal_play_state_changed(VideoWidget::SignalType state);
 };

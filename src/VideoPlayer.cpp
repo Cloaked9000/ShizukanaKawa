@@ -10,12 +10,15 @@
 #include <chrono>
 #include <thread>
 #include <Log.h>
+#include <VideoPlayer.h>
+
 #include "VideoPlayer.h"
 
 
 extern "C" {
 #include <X11/Xlib.h>
 #include <X11/X.h>
+#include <gdk/gdkx.h>
 }
 
 VideoPlayer::VideoPlayer(size_t parent_window_id_)
@@ -47,7 +50,6 @@ VideoPlayer::VideoPlayer(size_t parent_window_id_)
 
 VideoPlayer::~VideoPlayer()
 {
-    stop();
     if(audio_track_descriptions)
         libvlc_track_description_list_release(audio_track_descriptions);
     if(subtitle_track_descriptions)
@@ -57,9 +59,9 @@ VideoPlayer::~VideoPlayer()
     libvlc_release(vlc);
 }
 
-void VideoPlayer::open_from_stream(sf::InputStream &stream, const std::vector<std::string> &vlc_options)
+void VideoPlayer::open_from_stream(std::unique_ptr<sf::InputStream> stream, const std::vector<std::string> &vlc_options)
 {
-    player_context.stream = &stream;
+    player_context.stream = std::move(stream);
     player_context.media = libvlc_media_new_callbacks(vlc, open_callback, read_callback, seek_callback, close_callback, &player_context); //Take data from over SSH
     for(auto &option : vlc_options)
     {
@@ -95,10 +97,10 @@ ssize_t VideoPlayer::read_callback(void *opaque, unsigned char *buf, size_t len)
     return ctx->stream->read(buf, static_cast<sf::Int64>(len));
 }
 
-int VideoPlayer::seek_callback (void *opaque, uint64_t offset)
+int VideoPlayer::seek_callback(void *opaque, uint64_t offset)
 {
     auto *ctx = static_cast<PlayerContext*>(opaque);
-    return !ctx->stream->seek(static_cast<sf::Int64>(offset));
+    return ctx->stream->seek(static_cast<sf::Int64>(offset)) == -1 ? -1 : 0;
 }
 
 void VideoPlayer::set_position(const sf::Vector2i &pos)
@@ -151,7 +153,8 @@ void VideoPlayer::save_screenshot(const std::string &filepath)
 
 ssize_t VideoPlayer::get_playback_offset()
 {
-    return libvlc_media_player_get_time(player_context.player);
+    ssize_t offset = libvlc_media_player_get_time(player_context.player);
+    return offset == -1 ? 0u : static_cast<size_t>(offset);
 }
 
 void VideoPlayer::update()
@@ -224,7 +227,10 @@ void VideoPlayer::toggle_fullscreen()
 
 void VideoPlayer::stop()
 {
-    libvlc_media_player_stop(player_context.player);
+    if(player_context.player != nullptr)
+    {
+        libvlc_media_player_stop(player_context.player);
+    }
 }
 
 void VideoPlayer::rotate_audio_track()
@@ -252,8 +258,8 @@ void VideoPlayer::rotate_audio_track()
     else
         current_audio_track_description = current_audio_track_description->p_next;
 
-    std::cout << "Set audio track to " << current_audio_track_description->i_id << ": " << "/" << current_audio_track_description->psz_name << std::endl;
     libvlc_audio_set_track(player_context.player, current_audio_track_description->i_id);
+    display_message("Track " + std::to_string(current_audio_track_description->i_id) + ": " + std::string(current_audio_track_description->psz_name));
 }
 
 void VideoPlayer::rotate_subtitle_track()
@@ -282,8 +288,8 @@ void VideoPlayer::rotate_subtitle_track()
     else
         current_subtitle_track_description = current_subtitle_track_description->p_next;
 
-    std::cout << "Set sub track to " << current_subtitle_track_description->i_id << ": " << "/" << current_subtitle_track_description->psz_name << std::endl;
     libvlc_video_set_spu(player_context.player, current_subtitle_track_description->i_id);
+    display_message("Subtitle " + std::to_string(current_subtitle_track_description->i_id) + ": " + std::string(current_subtitle_track_description->psz_name));
 }
 
 size_t VideoPlayer::get_render_window_id()
@@ -317,4 +323,29 @@ void VideoPlayer::display_message(const std::string &message)
 void VideoPlayer::set_cursor_visible(bool visible)
 {
     window.setMouseCursorVisible(visible);
+}
+
+
+size_t VideoPlayer::get_subtitle_track()
+{
+    ssize_t sub_id = libvlc_video_get_spu(player_context.player);
+    return sub_id < 0 ? 0u : static_cast<size_t>(sub_id);
+}
+
+size_t VideoPlayer::get_audio_track()
+{
+    ssize_t track_id = libvlc_audio_get_track(player_context.player);
+    return track_id < 0 ? 0u : static_cast<size_t>(track_id);
+}
+
+void VideoPlayer::set_audio_track(size_t track_id)
+{
+    current_audio_track_description = nullptr;
+    libvlc_audio_set_track(player_context.player, track_id);
+}
+
+void VideoPlayer::set_subtitle_track(size_t sub_id)
+{
+    current_subtitle_track_description = nullptr;
+    libvlc_video_set_spu(player_context.player, sub_id);
 }

@@ -53,7 +53,7 @@ public:
      * @param callback The functor to call for each unique watch history entry.
      * It should return true if it wants more entries, or false if it has had enough.
      */
-    void for_each_entry(bool unique, const std::function<bool(std::shared_ptr<WatchHistoryEntry>)> &callback) override;
+    void for_each_entry(bool unique, const std::function<bool(std::shared_ptr<WatchHistoryEntry>)> callback) override;
 
     /*!
      * Erases watch history for a given episode ID

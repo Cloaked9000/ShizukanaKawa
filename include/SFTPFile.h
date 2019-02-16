@@ -44,7 +44,7 @@ public:
      * @param buffsz Your buffer size
      * @return Number of bytes actually read
      */
-    size_t read(void *buff, size_t buffsz);
+    ssize_t read(void *buff, size_t buffsz);
 
     /*!
      * Checks to see if the file is open or not

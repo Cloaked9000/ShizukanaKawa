@@ -31,9 +31,9 @@ EpisodeListingWidget::EpisodeListingWidget(std::shared_ptr<EpisodeEntry> episode
 
 void EpisodeListingWidget::update()
 {
-    watched_icon.set(episode_entry->watched ? watched_image : unwatched_image);
-    label.set_text(episode_entry->name);
+    watched_icon.set(episode_entry->get_watched() ? watched_image : unwatched_image);
+    label.set_text(episode_entry->get_name());
 
-    set_search_string(episode_entry->name);
-    set_tooltip_text(episode_entry->name);
+    set_search_string(episode_entry->get_name());
+    set_tooltip_text(episode_entry->get_name());
 }

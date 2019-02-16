@@ -122,9 +122,9 @@ public:
      */
     std::shared_ptr<SeasonEntry> get_episode_season(uint64_t episode_id);
 
+    std::string generate_season_thumbnail(const std::string &remote_filepath);
 private:
 
-    std::string generate_season_thumbnail(const std::string &remote_filepath);
 
     //State
     std::string library_root;

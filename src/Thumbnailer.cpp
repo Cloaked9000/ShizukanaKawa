@@ -35,7 +35,11 @@ sf::Image Thumbnailer::generate_thumbnail(sf::InputStream &stream, size_t width,
     libvlc_media_add_option(media, ":no-audio");
     libvlc_media_add_option(media, ":no-spu");
     libvlc_media_add_option(media, ":no-osd");
-
+    libvlc_media_add_option(media, ":no-stats");
+    libvlc_media_add_option(media, ":no-xlib");
+    libvlc_media_add_option(media, ":no-video-title-show");
+    libvlc_media_add_option(media, ":no-disable-screensaver");
+    libvlc_media_add_option(media, ":no-snapshot-preview");
 
     //Render to an internal buffer
     libvlc_media_player_t *player = libvlc_media_player_new_from_media(media);
@@ -44,14 +48,21 @@ sf::Image Thumbnailer::generate_thumbnail(sf::InputStream &stream, size_t width,
     libvlc_video_set_callbacks(player, lock_callback, unlock_callback, nullptr, &context);
 
     //Play media and seek to position
+    float gen_offset = 0;
+    while(gen_offset >= 0.8F || gen_offset <= 0.2F)
+        gen_offset = ((float) rand() / (RAND_MAX));
     libvlc_media_player_play(player);
-    libvlc_media_player_set_position(player, 0.5f);
+    libvlc_media_player_set_position(player, gen_offset);
     const std::chrono::milliseconds wait_time(50);
-    const uint32_t max_attempts = 200;
+    const uint32_t max_attempts = 1000;
     for(uint32_t a = 0; a < max_attempts; ++a)
     {
-        if(libvlc_media_player_is_playing(player) && libvlc_media_player_get_position(player) >= 0.5f)
-            break;
+        if(libvlc_media_player_is_playing(player) != 0)
+        {
+            auto play_offset = libvlc_media_player_get_position(player);
+            if((play_offset >= 0.2 && play_offset <= 0.8F))
+                break;
+        }
         std::this_thread::sleep_for(wait_time);
     }
     context.seek_complete = true;
@@ -96,7 +107,7 @@ ssize_t Thumbnailer::read_callback(void *opaque, unsigned char *buf, size_t len)
 int Thumbnailer::seek_callback (void *opaque, uint64_t offset)
 {
     auto *ctx = static_cast<ThumbnailContext*>(opaque);
-    return !ctx->stream->seek(static_cast<sf::Int64>(offset));
+    return ctx->stream->seek(static_cast<sf::Int64>(offset));
 }
 
 void *Thumbnailer::lock_callback(void *opaque, void **pixels)

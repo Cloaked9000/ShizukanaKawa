@@ -7,6 +7,7 @@
 
 
 #include <SFML/Graphics/RenderWindow.hpp>
+#include <SFML/System/InputStream.hpp>
 
 extern "C"
 {
@@ -38,7 +39,7 @@ public:
      * @param stream The stream to read video data from
      * @param vlc_options Options to pass directly to LibVLC
      */
-    virtual void open_from_stream(sf::InputStream &stream, const std::vector<std::string> &vlc_options);
+    virtual void open_from_stream(std::unique_ptr<sf::InputStream> stream, const std::vector<std::string> &vlc_options);
 
     /*!
      * Sets the position of the playback window,
@@ -181,7 +182,33 @@ public:
      */
     virtual void set_cursor_visible(bool visible);
 
-protected:
+    /*!
+     * Gets the ID of the current subtitle track
+     *
+     * @return ID of the current sub track
+     */
+    virtual size_t get_subtitle_track();
+
+    /*!
+     * Gets the ID of the current audio track
+     *
+     * @return The ID of the current audio track
+     */
+    virtual size_t get_audio_track();
+
+    /*!
+     * Sets the ID of the current audio track
+     *
+     * @param track_id ID of the audio track to use
+     */
+    virtual void set_audio_track(size_t track_id);
+
+    /*!
+     * Sets the ID of the current sub track
+     *
+     * @param sub_id The ID of the subtitle track to switch to
+     */
+    virtual void set_subtitle_track(size_t sub_id);
 
     /*!
      * Called internally for emitting events.
@@ -196,8 +223,7 @@ private:
     struct PlayerContext
     {
         PlayerContext()
-        : stream(nullptr),
-          media(nullptr),
+        : media(nullptr),
           player(nullptr)
         {
         }
@@ -205,9 +231,16 @@ private:
         {
             libvlc_media_player_release(player);
             libvlc_media_release(media);
+            player = nullptr;
+            media = nullptr;
         }
 
-        sf::InputStream *stream;
+        void operator=(const PlayerContext &o)=delete;
+        PlayerContext(const PlayerContext &o)=delete;
+        void operator=(PlayerContext &&o)=delete;
+        PlayerContext(PlayerContext &&o)=delete;
+
+        std::unique_ptr<sf::InputStream> stream;
         libvlc_media_t *media;
         libvlc_media_player_t *player;
     };

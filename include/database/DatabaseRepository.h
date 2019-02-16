@@ -9,13 +9,24 @@
 #include <memory>
 #include <Types.h>
 #include <map>
+#include <atomic>
 #include <mutex>
+#define CACHE_CLEAR_THRESHOLD 200
+
+class SyntaxError : public std::logic_error
+{
+public:
+    explicit SyntaxError(const std::string &e)
+            : std::logic_error(e)
+    {}
+};
+
 
 template<typename T>
 class DatabaseRepository
 {
 public:
-    virtual ~DatabaseRepository()=default;
+    virtual ~DatabaseRepository()= default;
 
     /*!
      * Flushes the cache to the database
@@ -25,7 +36,14 @@ public:
         std::lock_guard<std::mutex> guard(lock);
         for(auto &a : cache)
         {
-            database_update(a.second);
+            if(a.second)
+            {
+                if(a.second->get_dirty())
+                {
+                    a.second->set_dirty(false); //Order is important, don't want to have changed commited, then more changes made, then dirty flag cleared
+                    database_update(a.second);
+                }
+            }
         }
     }
 
@@ -36,24 +54,28 @@ public:
      * @param entry The entry to create. Its id parameter will be filled in.
      * @return The ID of the newly created object
      */
-    uint64_t create(T *entry)
+    template<typename ...Args>
+    inline uint64_t create(Args &&...args)
     {
         try
         {
-            entry->id = database_create(entry);
-            store_cache(std::make_shared<T>(*entry));
+            auto entry = std::make_shared<T>(std::forward<Args>(args)...);
+            database_create(entry.get());
+            entry->set_dirty(false);
+            entry = store_cache(entry);
+            return entry->get_id();
         }
         catch(std::exception &e)
         {
             throw std::runtime_error("Failed to create a new '" + DEMANGLE(T) + "' entry within the database. Exception: " + e.what());
         }
-        return entry->id;
     }
 
     /*!
      * Loads an entry with a given ID from the database, Goes through
      * the caching layer first.
      *
+     * @throws An std::exception on failure.
      * @param id The ID of the entry to load.
      * @return The ID of the newly created object
      */
@@ -61,6 +83,7 @@ public:
     {
         //The database might throw an exception if it can't find it. Catch it.
         std::shared_ptr<T> loaded;
+
         try
         {
             std::lock_guard<std::mutex> guard(lock);
@@ -68,19 +91,25 @@ public:
             //Check the cache first to see if it's already loaded
             auto iter = cache.find(id);
             if(iter != cache.end())
+            {
+                if(!iter->second)
+                {
+                    throw std::runtime_error("Entry was recently deleted");
+                }
+
                 return iter->second;
+            }
 
             //It's not cached, load it from the database implementation
             loaded = database_load(id);
+            loaded->set_dirty(false);
         }
         catch(std::exception &e)
         {
             throw std::runtime_error("Failed to load '" + DEMANGLE(T) + "' with ID " + std::to_string(id) + " from the database. Exception: " + e.what());
         }
 
-        //Cache the loaded entry then exit
-        store_cache(loaded);
-        return loaded;
+        return store_cache(loaded);
     }
 
     /*!
@@ -94,13 +123,16 @@ public:
 
         try
         {
+            //Delete from database
+            database_erase(id);
+
             //Delete from cache if it's cached
             auto iter = cache.find(id);
             if(iter != cache.end())
-                cache.erase(iter);
-
-            //Delete from database
-            database_erase(id);
+            {
+                iter->second = nullptr;
+                return;
+            }
         }
         catch(std::exception &e)
         {
@@ -129,6 +161,14 @@ public:
         {
             load(id);
         }
+        catch(const std::out_of_range &e) //If it's an at() error, then it's a logic error. Don't absorb.
+        {
+            throw;
+        }
+        catch(const SyntaxError &) //If the query has an error in it, it's a logic error, so don't absorb.
+        {
+            throw;
+        }
         catch(...)
         {
             return false;
@@ -144,11 +184,14 @@ protected:
      * Store an object in the cache
      *
      * @param obj The object to store
+     * @return Returns what you pass it if it's a new cache entry. Returns the previously-cached object if this ID is occupied.
      */
-    void store_cache(std::shared_ptr<T> obj)
+    std::shared_ptr<T> store_cache(std::shared_ptr<T> obj)
     {
         if(!obj)
-            return;
+        {
+            return {};
+        }
 
         std::lock_guard<std::mutex> guard(lock);
 
@@ -156,39 +199,8 @@ protected:
         clean_cache();
 
         //Store the object in the cache
-        auto ret = cache.emplace(obj->id, std::move(obj));
-        if(!ret.second)
-        {
-            throw std::logic_error("DatabaseRepository::store_cache(): Can't cache entities with duplicate IDs");
-        }
-    }
-
-    /*!
-     * Retrieves an object from the cache
-     *
-     * @throws An std::range_error on failure, if the ID doesn't exist.
-     * @param id The ID of the object to fetch
-     * @return The object
-     */
-    T retrieve_cache(uint64_t id)
-    {
-        std::lock_guard<std::mutex> guard(lock);
-        return cache.at(id);
-    }
-
-    /*!
-     * Tries to retrieve a cache item
-     *
-     * @param id The ID of the object to fetch
-     * @param entry A pointer to a valid object of type T, where the object will be copied to
-     * @return True if the object could be fetched, false otherwise.
-     */
-    bool try_retrieve_cache(uint64_t id, T *entry)
-    {
-        std::lock_guard<std::mutex> guard(lock);
-        auto iter = cache.find(id);
-        entry = iter;
-        return iter != cache.end();
+        auto ret = cache.emplace(obj->get_id(), std::move(obj));
+        return ret.first->second;
     }
 
     // To be implemented by the repository implementation
@@ -204,7 +216,7 @@ protected:
     /*!
      * Loads an existing entry from the database
      *
-     * @throws An std::logic_error on failure.
+     * @throws An std::exception on failure.
      * @param entry_id The ID of the entry to load
      */
     virtual std::shared_ptr<T> database_load(uint64_t entry_id) =0;
@@ -213,7 +225,7 @@ protected:
      * Updates the entry if it's already
      * an existing entry in the database
      *
-     * @throws An std::logic_error on failure
+     * @throws An std::exception on failure
      */
     virtual void database_update(std::shared_ptr<T> entry) =0;
 
@@ -233,19 +245,35 @@ private:
      */
     void clean_cache()
     {
+        //Don't do anything unless there's lots of stuff in the cache
+        if(cache.size() < CACHE_CLEAR_THRESHOLD)
+        {
+            return;
+        }
+
         //Free things which aren't in use
         for(auto iter = cache.begin(); iter != cache.end(); )
         {
+            if(!iter->second)
+            {
+                iter = cache.erase(iter);
+                continue;
+            }
+
             if(iter->second.use_count() == 1) //If we're the only ones using it
             {
                 try
                 {
                     //Commit to database then erase
-                    database_update(iter->second);
+                    if(iter->second->get_dirty())
+                    {
+                        iter->second->set_dirty(false);
+                        database_update(iter->second);
+                    }
                 }
                 catch(const std::exception &e)
                 {
-                    throw std::runtime_error("Failed to commit '" + DEMANGLE(T) + "' with ID " + std::to_string(iter->second->id) + " to the database. Exception: " + e.what());
+                    throw std::runtime_error("Failed to commit '" + DEMANGLE(T) + "' with ID " + std::to_string(iter->second->get_id()) + " to the database. Exception: " + e.what());
                 }
 
                 iter = cache.erase(iter);
@@ -259,5 +287,38 @@ private:
     std::map<uint64_t, std::shared_ptr<T>> cache;
     std::mutex lock;
 };
+
+constexpr bool equal( char const* a, char const* b )
+{
+    return *a == *b && (*a == '\0' || equal(a + 1, b + 1));
+}
+
+#define db_define_dirty() \
+public: \
+inline void set_dirty(bool val) {dirty = val;} \
+inline bool get_dirty() {return dirty;} \
+private: \
+std::atomic<bool> dirty = false;
+
+#define db_entry_def(type, name) \
+public: \
+template<typename T> \
+inline void set_##name(T val) \
+{ \
+    (name) = std::move(val); \
+    if constexpr(!equal("id", #name) && !equal("dirty", #name)) dirty = true; \
+} \
+template<typename T> \
+inline void inc_##name(T val) \
+{ \
+    (name) += val; \
+    if constexpr(!equal("id", #name) && !equal("dirty", #name)) dirty = true; \
+} \
+inline const auto &get_##name() \
+{ \
+    return (name); \
+} \
+private: \
+type name;
 
 #endif //SFTPMEDIASTREAMER_DATABASEREPOSITORY_H

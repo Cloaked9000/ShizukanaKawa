@@ -53,7 +53,7 @@ public:
      * @param callback The callback to call for each row. Should return true
      * if more rows are wanted, false if it's finished.
      */
-    void for_each_episode_in_season(uint64_t season_id, const std::function<bool(std::shared_ptr<EpisodeEntry> )> &callback) override;
+    void for_each_episode_in_season(uint64_t season_id, const std::function<bool(std::shared_ptr<EpisodeEntry> )> callback) override;
 
     /*!
      * Tries to get the ID of an episode from its filepath

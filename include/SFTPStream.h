@@ -5,7 +5,7 @@
 #ifndef SFTPMEDIASTREAMER_SFTPSTREAM_H
 #define SFTPMEDIASTREAMER_SFTPSTREAM_H
 
-
+#include <memory>
 #include <SFML/System/InputStream.hpp>
 #include "SFTPFile.h"
 
@@ -13,7 +13,7 @@ class SFTPStream : public sf::InputStream
 {
 public:
 
-    explicit SFTPStream(SFTPFile *file);
+    explicit SFTPStream(std::unique_ptr<SFTPFile> file);
 
     ////////////////////////////////////////////////////////////
     /// \brief Read data from the stream
@@ -55,7 +55,7 @@ public:
     ////////////////////////////////////////////////////////////
     sf::Int64 getSize() override;
 private:
-    SFTPFile *file;
+    std::unique_ptr<SFTPFile> file;
 };
 
 

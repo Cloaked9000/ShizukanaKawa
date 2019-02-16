@@ -8,6 +8,7 @@
 #include <database/episode/EpisodeEntry.h>
 #include <iostream>
 #include <Log.h>
+#include <thread>
 #include "Library.h"
 
 Library::Library(std::shared_ptr<SFTPSession> sftp_,
@@ -31,6 +32,7 @@ Library::Library(std::shared_ptr<SFTPSession> sftp_,
 void Library::sync()
 {
     frlog << Log::info << "Syncing library... " << Log::end;
+    auto start_sync = std::chrono::system_clock::now();
 
     //Get a list of files physically in the library
     std::vector<Attributes> root_list = sftp->enumerate_directory(library_root);
@@ -40,14 +42,14 @@ void Library::sync()
 
         //Check if this season is actually on disk
         auto season_iter = std::find_if(root_list.begin(), root_list.end(), [&](const Attributes &attr) {
-            return attr.full_name == season->filepath;
+            return attr.full_name == season->get_filepath();
         });
 
         //Erase from the database if it couldn't be found on disk
         if(season_iter == root_list.end())
         {
-            frlog << Log::info << "Deleting removed season: " << season->name << Log::end;
-            delete_season(season->id);
+            frlog << Log::info << "Deleting removed season: " << season->get_name() << Log::end;
+            delete_season(season->get_id());
         }
         return true;
     });
@@ -66,15 +68,14 @@ void Library::sync()
             continue;
 
         frlog << Log::info << "Found new season: " << season.name << Log::end;
-        SeasonEntry new_season(0, season.full_name, season.name, std::move(thumbnail), time(nullptr));
-        season_table->create(&new_season);
+        season_table->create(0, season.full_name, season.name, std::move(thumbnail), season.mod_date);
     }
 
     //Now ensure that each episode in each season has a related database entry
     season_table->for_each_season([&](std::shared_ptr<SeasonEntry> season) -> bool {
 
         //Enumerate the season's directory
-        std::vector<Attributes> episode_list = sftp->enumerate_directory(season->filepath);
+        std::vector<Attributes> episode_list = sftp->enumerate_directory(season->get_filepath());
         for(auto &episode : episode_list)
         {
             //Skip anything that isn't an episode (regular video file)
@@ -87,15 +88,15 @@ void Library::sync()
                 continue;
 
             //Create the entry
-            frlog << Log::info << "Found new episode for " << season->name << ": " << episode.name << Log::end;
-            EpisodeEntry new_episode(0, season->id, episode.full_name, episode.name, false, 0, AUDIO_TRACK_UNSET, SUB_TRACK_UNSET, time(nullptr));
-            episode_table->create(&new_episode);
+            frlog << Log::info << "Found new episode for " << season->get_name() << ": " << episode.name << Log::end;
+            episode_table->create(0, season->get_id(), episode.full_name, episode.name, false, 0, AUDIO_TRACK_UNSET, SUB_TRACK_UNSET, episode.mod_date);
         }
 
         return true;
     });
 
-    frlog << Log::info << "Finished library sync" << Log::end;
+    auto time_taken = std::chrono::system_clock::now() - start_sync;
+    frlog << Log::info << "Finished library sync (" << std::chrono::duration_cast<std::chrono::milliseconds>(time_taken).count() << "ms)" << Log::end;
 }
 
 std::string Library::generate_season_thumbnail(const std::string &remote_filepath)
@@ -107,6 +108,7 @@ std::string Library::generate_season_thumbnail(const std::string &remote_filepat
     {
         //It's a directory, so find a media file which we can base a cover image on
         auto media_list = sftp->enumerate_directory(attributes.full_name);
+        std::random_shuffle(media_list.begin(), media_list.end());
         auto iter = std::find_if(media_list.begin(), media_list.end(), [](const Attributes &attr) {
             return attr.type == Attributes::Regular && (attr.name.find(".mkv") != std::string::npos || attr.name.find(".mp4") != std::string::npos);
         });
@@ -119,8 +121,8 @@ std::string Library::generate_season_thumbnail(const std::string &remote_filepat
         return "";
 
     //Generate a thumbnail.
-    SFTPFile file = sftp->open(cover_source);
-    SFTPStream video_stream(&file);
+    auto file = std::make_unique<SFTPFile>(sftp->open(cover_source));
+    SFTPStream video_stream(std::move(file));
     sf::Image thumbnail = thumbnailer.generate_thumbnail(video_stream, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
     thumbnail.saveToFile("tmp_thumbnail.jpg");
     return SystemUtilities::read_binary_file("tmp_thumbnail.jpg");
@@ -130,7 +132,7 @@ void Library::delete_season(uint64_t season_id)
 {
     //Iterate through each episode of the season and delete those
     episode_table->for_each_episode_in_season(season_id, [&](const std::shared_ptr<EpisodeEntry> &episode) -> bool {
-        delete_episode(episode->id);
+        delete_episode(episode->get_id());
         return true;
     });
 
@@ -148,12 +150,11 @@ void Library::delete_episode(uint64_t episode_id)
 std::shared_ptr<SeasonEntry> Library::get_episode_season(uint64_t episode_id)
 {
     std::shared_ptr<EpisodeEntry> episode = episode_table->load(episode_id);
-    return season_table->load(episode->season_id);
+    return season_table->load(episode->get_season_id());
 }
 
 
 void Library::add_to_watched(uint64_t episode_id)
 {
-    WatchHistoryEntry entry(0, episode_id, std::time(nullptr));
-    watch_history_table->create(&entry);
+    watch_history_table->create(0, episode_id, std::time(nullptr));
 }

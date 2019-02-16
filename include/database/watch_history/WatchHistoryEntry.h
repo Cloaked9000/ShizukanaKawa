@@ -8,11 +8,12 @@
 
 #include <cstdint>
 #include <ctime>
+#include <database/DatabaseRepository.h>
 
 class WatchHistoryEntry
 {
 public:
-    WatchHistoryEntry(uint64_t id_, uint64_t episode_id_, time_t time_)
+    WatchHistoryEntry(uint64_t id_, uint64_t episode_id_, uint64_t time_)
     : id(id_),
       episode_id(episode_id_),
       date(time_)
@@ -22,9 +23,16 @@ public:
     : WatchHistoryEntry(0, 0, 0)
     {}
 
-    uint64_t id;
-    uint64_t episode_id;
-    time_t  date;
+    WatchHistoryEntry(WatchHistoryEntry &&o)
+    : id(o.id),
+      episode_id(o.episode_id),
+      date(o.date)
+    {}
+
+    db_define_dirty()
+    db_entry_def(uint64_t, id)
+    db_entry_def(uint64_t, episode_id)
+    db_entry_def(time_t, date)
 };
 
 

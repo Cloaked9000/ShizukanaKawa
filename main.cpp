@@ -18,6 +18,12 @@
 
 int main(int argc, char** argv)
 {
+
+
+
+    //Seed random
+    std::srand(std::time(nullptr));
+
     //Install signal handler
     SignalHandler::install();
 
@@ -68,9 +74,10 @@ int main(int argc, char** argv)
     //Start application
     {
         Application *window;
-        glade_builder->get_widget_derived("main_window", window, window, library, sftp);
+        glade_builder->get_widget_derived("main_window", window, library, sftp);
         window->set_title(WINDOW_TITLE);
         application->run(*window);
+        delete window;
     }
     season_table->flush();
     episode_table->flush();
