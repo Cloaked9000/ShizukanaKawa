@@ -15,7 +15,7 @@ pkg_check_modules(GTKMM gtkmm-3.0)
 include_directories(include)
 set(CMAKE_CXX_STANDARD 17)
 
-set(CORE_CXX_FLAGS "-m64 -pthread -Wstrict-aliasing -msse -msse2 -Wall -Werror -Wextra -pedantic-errors -Wno-parentheses")
+set(CORE_CXX_FLAGS "-m64 -pthread -Wstrict-aliasing -msse -msse2 -Wall -Werror -Wextra -Wno-parentheses")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${CORE_CXX_FLAGS} -g -O0")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${CORE_CXX_FLAGS} -O2")
 

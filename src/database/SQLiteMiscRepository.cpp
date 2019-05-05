@@ -26,7 +26,7 @@ void SQLiteMiscRepository::for_each_recently_added(const std::function<bool(std:
 
 void SQLiteMiscRepository::for_each_recently_watched(const std::function<bool(std::shared_ptr<SeasonEntry>)>callback)
 {
-    auto stmt = database->compile_statement("SELECT season_id FROM watch_history INNER JOIN episode ON watch_history.episode_id = episode.id GROUP BY season_id ORDER BY watch_history.id DESC;");
+    auto stmt = database->compile_statement("SELECT DISTINCT season_id FROM watch_history INNER JOIN episode ON watch_history.episode_id = episode.id ORDER BY watch_history.id DESC;");
     auto results = database->query(stmt, {});
     auto &col = results.at("season_id");
     for(auto id : col)
